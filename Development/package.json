@@ -1,0 +1,42 @@
+{
+  "name": "@meshsdk/root",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build:mesh && turbo run build:docs && turbo run build:apps && turbo run build:scripts",
+    "build2": "turbo build --concurrency 15 && npm run build:scripts",
+    "build:apps": "turbo run build:apps",
+    "build:docs": "turbo run build:docs",
+    "build:mesh": "turbo run build:mesh",
+    "build:scripts": "turbo run build:scripts",
+    "clean": "turbo run clean && rm -rf .turbo && rm -rf dist && rm -rf node_modules && rm package-lock.json",
+    "dev": "turbo dev --concurrency 15",
+    "format": "turbo run format --continue -- --cache --cache-location node_modules/.cache/.prettiercache",
+    "format:fix": "turbo run format --continue -- --write --cache --cache-location node_modules/.cache/.prettiercache",
+    "lint": "turbo lint",
+    "pack": "turbo pack",
+    "test": "turbo test",
+    "sh:version": "sh scripts/bump-version.sh"
+  },
+  "devDependencies": {
+    "@meshsdk/configs": "*",
+    "@types/jest": "^29.5.12",
+    "dotenv": "^16.4.5",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
+    "turbo": "latest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "npm@9.6.4",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "scripts/*"
+  ],
+  "dependencies": {
+    "install": "^0.13.0",
+    "npm": "^10.8.0"
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "extends": "@meshsdk/configs/typescript/base.json"
+}
