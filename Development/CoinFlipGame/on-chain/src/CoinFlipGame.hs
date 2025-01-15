@@ -33,7 +33,7 @@ module CoinFlipGame where
 import GHC.Generics (Generic)
 
 import PlutusCore.Version (plcVersion100)
-import PlutusLedgerApi.V2 (CurrencySymbol, Datum (..), OutputDatum (..), ScriptContext (..), TokenName (..), TxInfo (..), TxOut (..), txOutAddress, txOutValue, PubKeyHash)
+import PlutusLedgerApi.V2 (CurrencySymbol, Datum (..), OutputDatum (..), ScriptContext (..), TokenName (..), TxInfo (..), TxOut (..), txOutAddress, txOutValue, PubKeyHash, TxInInfo(..))
 import PlutusLedgerApi.V1.Address (toPubKeyHash, toScriptHash)
 import PlutusLedgerApi.V2.Contexts (getContinuingOutputs, txInfoOutputs, txSignedBy)
 import PlutusLedgerApi.V1.Value (valueOf, lovelaceValueOf, Lovelace)
@@ -43,6 +43,8 @@ import PlutusTx.Prelude qualified as PlutusTx
 import PlutusTx.Eq qualified as PlutusTx
 import qualified PlutusTx.Builtins as Builtins
 import PlutusLedgerApi.V1.Credential (Credential(..))
+import PlutusTx.Builtins (serialiseData)
+
 
 -- BLOCK1
 -- CoinFlipGame.hs
@@ -87,27 +89,27 @@ instance PlutusTx.Eq GameState where
 
 -- BLOCK3
 -- CoinFlipGame.hs
-newtype CoinFlipGameDatum = CoinFlipGameDatum {cfgdGameState :: GameState}
-  deriving stock (Generic)
-  deriving newtype
-    ( HasBlueprintDefinition
-    , PlutusTx.ToData
-    , PlutusTx.FromData
-    , PlutusTx.UnsafeFromData
-    )
+data CoinFlipGameDatum = CoinFlipGameDatum 
+    { cfgdGameState :: GameState
+    , cfgdHousePotScriptHash :: PlutusTx.BuiltinByteString
+    , cfgdVRFHolderScriptHash :: PlutusTx.BuiltinByteString
+    }
+    deriving stock (Generic)
+
+PlutusTx.makeIsDataIndexed ''CoinFlipGameDatum [('CoinFlipGameDatum, 0)]
+PlutusTx.makeLift ''CoinFlipGameDatum
 
 -- BLOCK4
 -- CoinFlipGame.hs
-data CoinFlipGameRedeemer =  StartBet | ForgePrize | ClaimPrize
+data CoinFlipGameRedeemer =  StartBet | ClaimPrize
   -- ^ Represents the possible actions that can be taken in the game.
   -- StartBet: Player2 enters the game and places their bet.
-  -- ForgePrize: The VRF is generated, and the winner is determined.
   -- ClaimPrize: The winner claims the prize (locked ADA).
   deriving stock (Generic)
   deriving anyclass (HasBlueprintDefinition)
 
 PlutusTx.makeLift ''CoinFlipGameRedeemer
-PlutusTx.makeIsDataSchemaIndexed ''CoinFlipGameRedeemer [('StartBet, 1), ('ForgePrize, 2), ('ClaimPrize, 3)]
+PlutusTx.makeIsDataSchemaIndexed ''CoinFlipGameRedeemer [('StartBet, 1), ('ClaimPrize, 2)]
 
 -- BLOCK5
 -- CoinFlipGame.hs
@@ -118,7 +120,7 @@ coinFlipGameTypedValidator ::
   CoinFlipGameRedeemer ->
   ScriptContext ->
   Bool
-coinFlipGameTypedValidator params (CoinFlipGameDatum gameState) redeemer ctx@(ScriptContext txInfo _) =
+coinFlipGameTypedValidator params (CoinFlipGameDatum gameState housePotHash vrfHolderHash) redeemer ctx@(ScriptContext txInfo _) =
   PlutusTx.and conditions
   where
     conditions :: [Bool]
@@ -134,12 +136,16 @@ coinFlipGameTypedValidator params (CoinFlipGameDatum gameState) redeemer ctx@(Sc
           correctOutput Started
         , -- The NFT must remain in the contract
           nftStaysInContract
-        , -- The UTxO must have a game ID
-          gameIdPresent
+        -- , -- The UTxO must have a game ID
+        --   gameIdPresent
         , -- Input must contain a UTxO locked by the HousePot script
-          hasHousePotInput
+          correctHousePotInputHash housePotHash
         , -- Input must contain a UTxO locked by the VRFHolder script
-          hasVRFHolderInput
+          correctVRFHolderInputHash vrfHolderHash
+        ]
+      ClaimPrize ->
+        [
+          PlutusTx.traceError "Unimplemented redeemer"
         ]
       _ ->
         PlutusTx.traceError "Unimplemented redeemer"
@@ -162,7 +168,7 @@ coinFlipGameTypedValidator params (CoinFlipGameDatum gameState) redeemer ctx@(Sc
           case txOutDatum o of
             OutputDatum (Datum datum) ->
               case PlutusTx.fromBuiltinData datum of
-                Just (CoinFlipGameDatum state) ->
+                Just (CoinFlipGameDatum state _ _) ->
                   state PlutusTx.== expectedState
                 Nothing -> PlutusTx.traceError "Failed to decode datum"
             _ -> PlutusTx.traceError "Expected inline datum"
@@ -177,25 +183,36 @@ coinFlipGameTypedValidator params (CoinFlipGameDatum gameState) redeemer ctx@(Sc
         _ -> PlutusTx.traceError "Expected exactly one continuing output"
 
     -- Helper function to check if a UTxO is locked by a specific script hash
-    hasScriptInput :: PlutusTx.BuiltinByteString -> Bool
-    hasScriptInput scriptHash =
-      PlutusTx.any
+    correctHousePotInputHash :: PlutusTx.BuiltinByteString -> Bool
+    correctHousePotInputHash expectedHash =
+      case PlutusTx.find
         ( \txInInfo ->
-            let address = txInInfoResolved txInInfo
-            in case toScriptHash address of
-                Just actualScriptHash ->
-                    PlutusTx.traceIfFalse
-                      "Input not locked by the required script"
-                      (PlutusTx.sha2_256 (serialiseData $ PlutusTx.toBuiltinData actualScriptHash) PlutusTx.== scriptHash)
-                Nothing -> PlutusTx.traceError "Input is not a script address"
+            case txInInfo of
+              TxInInfo _ txOut ->
+                case toScriptHash (txOutAddress txOut) of
+                    Just actualScriptHash ->
+                        PlutusTx.sha2_256 (serialiseData $ PlutusTx.toBuiltinData actualScriptHash) PlutusTx.== expectedHash
+                    Nothing -> False
         )
-        (txInfoInputs txInfo)
+        (txInfoInputs txInfo) of
+        Just _ -> True
+        Nothing -> PlutusTx.traceError "HousePot input not found"
 
-    hasHousePotInput :: Bool
-    hasHousePotInput = hasScriptInput (cfgpHousePotScriptHash params)
-
-    hasVRFHolderInput :: Bool
-    hasVRFHolderInput = hasScriptInput (cfgpVRFHolderScriptHash params)
+    -- Helper function to check if the VRFHolder input has the correct script hash
+    correctVRFHolderInputHash :: PlutusTx.BuiltinByteString -> Bool
+    correctVRFHolderInputHash expectedHash =
+      case PlutusTx.find
+        ( \txInInfo ->
+            case txInInfo of
+              TxInInfo _ txOut ->
+                case toScriptHash (txOutAddress txOut) of
+                    Just actualScriptHash ->
+                        PlutusTx.sha2_256 (serialiseData $ PlutusTx.toBuiltinData actualScriptHash) PlutusTx.== expectedHash
+                    Nothing -> False
+        )
+        (txInfoInputs txInfo) of
+        Just _ -> True
+        Nothing -> PlutusTx.traceError "VRFHolder input not found"
 
 -- BLOCK6
 -- CoinFlipGame.hs

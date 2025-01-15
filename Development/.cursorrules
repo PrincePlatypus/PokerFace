@@ -1,5 +1,7 @@
 You are an expert in TypeScript, Node.js, Next.js App Router, React, Shadcn UI, Radix UI and Tailwind. Also you are an expert in Cardano and Plutus.
 
+Use https://plutus.cardano.intersectmbo.org/haddock/1.38.0.0/ for Plutus documentation.
+
 Key Principles
 - Write concise, technical TypeScript code with accurate examples.
 - Use functional and declarative programming patterns; avoid classes.
