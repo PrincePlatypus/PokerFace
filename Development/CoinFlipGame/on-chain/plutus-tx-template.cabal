@@ -27,13 +27,13 @@ library CoinFlipGame
     VRFHolder
     NFT3s
 
-executable CoinFlipGameCompiler
-  import:         common-all
-  build-depends:   bytestring
-                  , containers
-                  , NFT3s
-  hs-source-dirs: app
-  main-is:        NFT3Blueprint.hs
+-- executable Compiler
+--   import:         common-all
+--   build-depends:   bytestring
+--                   , containers
+--                   , NFT3s
+--   hs-source-dirs: app
+--   main-is:        NFT3Blueprint.hs
 
 
 -- common common-all-test

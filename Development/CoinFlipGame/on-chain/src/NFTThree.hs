@@ -28,7 +28,7 @@
 {-# OPTIONS_GHC -fno-unbox-strict-fields #-}
 {-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.0.0 #-}
 
-module NFT3s where
+module NFTThree where
 
 import GHC.Generics (Generic)
 import PlutusCore.Version (plcVersion100)

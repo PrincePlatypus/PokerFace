@@ -13,10 +13,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Main where
 
-import NFT3s
+import NFTThree
 import Data.ByteString.Short qualified as Short
 import Data.Set qualified as Set
 import PlutusLedgerApi.Common (serialiseCompiledCode)
@@ -26,7 +28,7 @@ import System.Environment (getArgs)
 scriptIdentityParams :: ScriptIdentityParams
 scriptIdentityParams =
   ScriptIdentityParams
-    { sipHousePkh = error "Replace with house public key hash"
+    { sipHousePkh = "Replace with house public key hash"
     }
 
 myContractBlueprint :: ContractBlueprint
