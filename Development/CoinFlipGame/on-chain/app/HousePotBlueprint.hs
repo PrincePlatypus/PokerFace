@@ -18,35 +18,34 @@
 
 module Main where
 
-import CoinFlipGame
+import HousePot
 import Data.ByteString.Short qualified as Short
 import Data.Set qualified as Set
 import PlutusLedgerApi.Common (serialiseCompiledCode)
 import PlutusTx.Blueprint
 import System.Environment (getArgs)
 
-coinFlipGameParams :: CoinFlipGameParams
-coinFlipGameParams =
-    CoinFlipGameParams
-        { cfgVRFHolderScriptHash = error "Replace with VRFHolder script hash"
-        , cfgHousePotScriptHash = error "Replace with HousePot script hash"
-        , cfgHousePubKey = error "Replace with house public key hash"
+housePotParams :: HousePotParams
+housePotParams =
+    HousePotParams
+        { hppCoinFlipGameScriptHash = error "Replace with CoinFlipGame script hash"
+        , hppHouseAddress = error "Replace with house public key hash"
         }
 
 myContractBlueprint :: ContractBlueprint
 myContractBlueprint =
     MkContractBlueprint
-        { contractId = Just "coin-flip-game-validator"
+        { contractId = Just "house-pot-validator"
         , contractPreamble = myPreamble
         , contractValidators = Set.singleton myValidator
-        , contractDefinitions = deriveDefinitions @[CoinFlipGameParams, CoinFlipGameDatum, CoinFlipGameRedeemer]
+        , contractDefinitions = deriveDefinitions @[HousePotParams, HousePotRedeemer]
         }
 
 myPreamble :: Preamble
 myPreamble =
     MkPreamble
-        { preambleTitle = "CoinFlip Game Validator"
-        , preambleDescription = Just "Blueprint for a Plutus script managing CoinFlip game logic"
+        { preambleTitle = "House Pot Validator"
+        , preambleDescription = Just "Blueprint for a Plutus script managing house bets in CoinFlip game"
         , preambleVersion = "1.0.0"
         , preamblePlutusVersion = PlutusV2
         , preambleLicense = Just "MIT"
@@ -55,32 +54,26 @@ myPreamble =
 myValidator :: ValidatorBlueprint referencedTypes
 myValidator =
     MkValidatorBlueprint
-        { validatorTitle = "CoinFlip Game Validator"
-        , validatorDescription = Just "Plutus script validating CoinFlip game transactions"
+        { validatorTitle = "House Pot Validator"
+        , validatorDescription = Just "Plutus script validating house bet transactions"
         , validatorParameters =
             [ MkParameterBlueprint
                 { parameterTitle = Just "Parameters"
                 , parameterDescription = Just "Compile-time validator parameters"
                 , parameterPurpose = Set.singleton Spend
-                , parameterSchema = definitionRef @CoinFlipGameParams
+                , parameterSchema = definitionRef @HousePotParams
                 }
             ]
         , validatorRedeemer =
             MkArgumentBlueprint
                 { argumentTitle = Just "Redeemer"
-                , argumentDescription = Just "Redeemer for the CoinFlip game validator"
+                , argumentDescription = Just "Redeemer for the house pot validator"
                 , argumentPurpose = Set.fromList [Spend]
-                , argumentSchema = definitionRef @CoinFlipGameRedeemer
+                , argumentSchema = definitionRef @HousePotRedeemer
                 }
-        , validatorDatum =
-            Just $ MkArgumentBlueprint
-                { argumentTitle = Just "Datum"
-                , argumentDescription = Just "Datum containing game state information"
-                , argumentPurpose = Set.fromList [Spend]
-                , argumentSchema = definitionRef @CoinFlipGameDatum
-                }
+        , validatorDatum = Nothing  -- HousePot doesn't use datum
         , validatorCompiled = do
-            let script = coinFlipGameValidatorScript coinFlipGameParams
+            let script = housePotValidatorScript housePotParams
             let code = Short.fromShort (serialiseCompiledCode script)
             Just (compiledValidator PlutusV2 code)
         }
@@ -93,3 +86,4 @@ main =
     getArgs >>= \case
         [arg] -> writeBlueprintToFile arg
         args -> fail $ "Expects one argument, got " <> show (length args)
+

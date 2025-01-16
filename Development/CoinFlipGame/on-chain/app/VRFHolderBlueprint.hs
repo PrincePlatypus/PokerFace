@@ -18,35 +18,34 @@
 
 module Main where
 
-import CoinFlipGame
+import VRFHolder
 import Data.ByteString.Short qualified as Short
 import Data.Set qualified as Set
 import PlutusLedgerApi.Common (serialiseCompiledCode)
 import PlutusTx.Blueprint
 import System.Environment (getArgs)
 
-coinFlipGameParams :: CoinFlipGameParams
-coinFlipGameParams =
-    CoinFlipGameParams
-        { cfgVRFHolderScriptHash = error "Replace with VRFHolder script hash"
-        , cfgHousePotScriptHash = error "Replace with HousePot script hash"
-        , cfgHousePubKey = error "Replace with house public key hash"
+vrfHolderParams :: VRFHolderParams
+vrfHolderParams =
+    VRFHolderParams
+        { vhpCoinFlipGameScriptHash = error "Replace with CoinFlipGame script hash"
+        , vhpHousePubKey = error "Replace with house public key hash"
         }
 
 myContractBlueprint :: ContractBlueprint
 myContractBlueprint =
     MkContractBlueprint
-        { contractId = Just "coin-flip-game-validator"
+        { contractId = Just "vrf-holder-validator"
         , contractPreamble = myPreamble
         , contractValidators = Set.singleton myValidator
-        , contractDefinitions = deriveDefinitions @[CoinFlipGameParams, CoinFlipGameDatum, CoinFlipGameRedeemer]
+        , contractDefinitions = deriveDefinitions @[VRFHolderParams, VRFHolderDatum, VRFHolderRedeemer]
         }
 
 myPreamble :: Preamble
 myPreamble =
     MkPreamble
-        { preambleTitle = "CoinFlip Game Validator"
-        , preambleDescription = Just "Blueprint for a Plutus script managing CoinFlip game logic"
+        { preambleTitle = "VRF Holder Validator"
+        , preambleDescription = Just "Blueprint for a Plutus script managing VRF generation and verification in CoinFlip game"
         , preambleVersion = "1.0.0"
         , preamblePlutusVersion = PlutusV2
         , preambleLicense = Just "MIT"
@@ -55,32 +54,32 @@ myPreamble =
 myValidator :: ValidatorBlueprint referencedTypes
 myValidator =
     MkValidatorBlueprint
-        { validatorTitle = "CoinFlip Game Validator"
-        , validatorDescription = Just "Plutus script validating CoinFlip game transactions"
+        { validatorTitle = "VRF Holder Validator"
+        , validatorDescription = Just "Plutus script validating VRF generation and submission"
         , validatorParameters =
             [ MkParameterBlueprint
                 { parameterTitle = Just "Parameters"
                 , parameterDescription = Just "Compile-time validator parameters"
                 , parameterPurpose = Set.singleton Spend
-                , parameterSchema = definitionRef @CoinFlipGameParams
+                , parameterSchema = definitionRef @VRFHolderParams
                 }
             ]
         , validatorRedeemer =
             MkArgumentBlueprint
                 { argumentTitle = Just "Redeemer"
-                , argumentDescription = Just "Redeemer for the CoinFlip game validator"
+                , argumentDescription = Just "Redeemer for the VRF holder validator"
                 , argumentPurpose = Set.fromList [Spend]
-                , argumentSchema = definitionRef @CoinFlipGameRedeemer
+                , argumentSchema = definitionRef @VRFHolderRedeemer
                 }
         , validatorDatum =
             Just $ MkArgumentBlueprint
                 { argumentTitle = Just "Datum"
-                , argumentDescription = Just "Datum containing game state information"
+                , argumentDescription = Just "Datum containing VRF information"
                 , argumentPurpose = Set.fromList [Spend]
-                , argumentSchema = definitionRef @CoinFlipGameDatum
+                , argumentSchema = definitionRef @VRFHolderDatum
                 }
         , validatorCompiled = do
-            let script = coinFlipGameValidatorScript coinFlipGameParams
+            let script = vrfHolderValidatorScript vrfHolderParams
             let code = Short.fromShort (serialiseCompiledCode script)
             Just (compiledValidator PlutusV2 code)
         }
