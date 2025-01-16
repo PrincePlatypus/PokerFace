@@ -1,4 +1,4 @@
--- HighLowGame.hs
+
 
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveAnyClass             #-}

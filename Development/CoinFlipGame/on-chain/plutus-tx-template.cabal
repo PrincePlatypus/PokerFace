@@ -25,14 +25,16 @@ library CoinFlipGame
     CoinFlipGame
     HousePot
     VRFHolder
+    NFT3s
 
--- executable Compiler
---   import:         common-all
---   build-depends:   bytestring
---                   , containers
---                   , CoinFlipGame
---   hs-source-dirs: app
---   main-is:        CoinFlipGameBlueprint.hs
+executable CoinFlipGameCompiler
+  import:         common-all
+  build-depends:   bytestring
+                  , containers
+                  , NFT3s
+  hs-source-dirs: app
+  main-is:        NFT3Blueprint.hs
+
 
 -- common common-all-test
 --     import:         common-all
