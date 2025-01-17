@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            plutus-tx-template
-version:         0.5.0.0
+version:         0.6.0.0
 license:
 build-type:      Simple
 extra-doc-files: README.md
@@ -25,15 +25,15 @@ library CoinFlipGame
     CoinFlipGame
     HousePot
     VRFHolder
-    NFT3s
+    NFTThree
 
--- executable Compiler
---   import:         common-all
---   build-depends:   bytestring
---                   , containers
---                   , NFT3s
---   hs-source-dirs: app
---   main-is:        NFT3Blueprint.hs
+executable Compiler
+  import:         common-all
+  build-depends:   bytestring
+                  , containers
+                  , CoinFlipGame
+  hs-source-dirs: app
+  main-is:        NFTThreeBlueprint.hs
 
 
 -- common common-all-test

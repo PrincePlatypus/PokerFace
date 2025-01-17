@@ -26,9 +26,8 @@ import PlutusTx.Blueprint
 import System.Environment (getArgs)
 
 scriptIdentityParams :: ScriptIdentityParams
-scriptIdentityParams =
-  ScriptIdentityParams
-    { sipHousePkh = "Replace with house public key hash"
+scriptIdentityParams = ScriptIdentityParams
+    { sipHousePkh = "addr1qxp72h6d3eqsw54908l8jkpa0m7pcye9qsvvts4a578vxhv40gwsejuhku9zhazmm4wzx74ze02tme2kq7rj3uyvkxqqvyskch"
     }
 
 myContractBlueprint :: ContractBlueprint
@@ -36,8 +35,8 @@ myContractBlueprint =
   MkContractBlueprint
     { contractId = Just "script-identity-policy"
     , contractPreamble = myPreamble
-    , contractMintingPolicies = Set.singleton myMintingPolicy
-    , contractDefinitions = deriveDefinitions @[ScriptIdentityParams]
+    , contractValidators = Set.singleton myValidator
+    , contractDefinitions = deriveDefinitions @[ScriptIdentityParams, ()]
     }
 
 myPreamble :: Preamble
@@ -50,12 +49,12 @@ myPreamble =
     , preambleLicense = Just "Apache-2.0"
     }
 
-myMintingPolicy :: MintingPolicyBlueprint referencedTypes
-myMintingPolicy =
-  MkMintingPolicyBlueprint
-    { mintingPolicyTitle = "Script Identity NFT Policy"
-    , mintingPolicyDescription = Just "Mints exactly three NFTs to identify official script instances"
-    , mintingPolicyParameters =
+myValidator :: ValidatorBlueprint referencedTypes
+myValidator =
+  MkValidatorBlueprint
+    { validatorTitle = "Script Identity NFT Policy"
+    , validatorDescription = Just "Mints exactly three NFTs to identify official script instances"
+    , validatorParameters =
         [ MkParameterBlueprint
             { parameterTitle = Just "Parameters"
             , parameterDescription = Just "House public key hash for authorization"
@@ -63,17 +62,18 @@ myMintingPolicy =
             , parameterSchema = definitionRef @ScriptIdentityParams
             }
         ]
-    , mintingPolicyRedeemer =
+    , validatorRedeemer =
         MkArgumentBlueprint
           { argumentTitle = Just "Redeemer"
           , argumentDescription = Just "Unit redeemer (not used)"
           , argumentPurpose = Set.singleton Mint
           , argumentSchema = definitionRef @()
           }
-    , mintingPolicyCompiled = do
+    , validatorDatum = Nothing
+    , validatorCompiled = do
         let script = scriptIdentityPolicyScript scriptIdentityParams
         let code = Short.fromShort (serialiseCompiledCode script)
-        Just (compiledMintingPolicy PlutusV2 code)
+        Just (compiledValidator PlutusV2 code)
     }
 
 writeBlueprintToFile :: FilePath -> IO ()

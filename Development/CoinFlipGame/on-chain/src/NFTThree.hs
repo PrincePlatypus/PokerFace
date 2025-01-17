@@ -1,5 +1,3 @@
-
-
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveAnyClass             #-}
 {-# LANGUAGE DeriveGeneric              #-}
@@ -31,22 +29,27 @@
 module NFTThree where
 
 import GHC.Generics (Generic)
+
+
 import PlutusCore.Version (plcVersion100)
 import PlutusLedgerApi.V1.Value (TokenName(..), flattenValue)
 import PlutusLedgerApi.V2 (PubKeyHash, ScriptContext (..), TxInfo (..), TxOut(..), OutputDatum(..), txOutAddress)
 import PlutusLedgerApi.V2.Contexts (ownCurrencySymbol, txSignedBy)
 import PlutusLedgerApi.V1.Address (toScriptHash)
 import PlutusTx
+import PlutusTx.Blueprint
 import PlutusTx.Prelude qualified as PlutusTx
+
 
 -- Parameters for the minting policy
 data ScriptIdentityParams = ScriptIdentityParams
     { sipHousePkh :: PubKeyHash  -- House's public key hash
     }
     deriving stock (Generic)
+    deriving anyclass (HasBlueprintDefinition)
 
 PlutusTx.makeLift ''ScriptIdentityParams
-PlutusTx.makeIsDataIndexed ''ScriptIdentityParams [('ScriptIdentityParams, 0)]
+PlutusTx.makeIsDataSchemaIndexed ''ScriptIdentityParams [('ScriptIdentityParams, 0)]
 
 -- Token names for each script
 {-# INLINEABLE coinFlipTokenName #-}
