@@ -22,9 +22,9 @@ library CoinFlipGame
   import:         common-all
   hs-source-dirs: src
   exposed-modules:
-    CoinFlipGame
-    HousePot
-    VRFHolder
+    -- CoinFlipGame
+    -- HousePot
+    -- VRFHolder
     NFTThree
 
 executable Compiler

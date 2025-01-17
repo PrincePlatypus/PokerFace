@@ -33,25 +33,20 @@ import GHC.Generics (Generic)
 
 import PlutusCore.Version (plcVersion100)
 import PlutusLedgerApi.V1.Value (TokenName(..), flattenValue)
-import PlutusLedgerApi.V2 (PubKeyHash, ScriptContext (..), TxInfo (..), TxOut(..), OutputDatum(..), txOutAddress)
+import PlutusLedgerApi.V2 (PubKeyHash, ScriptContext (..), TxInfo (..), TxOut(..), txOutAddress)
 import PlutusLedgerApi.V2.Contexts (ownCurrencySymbol, txSignedBy)
 import PlutusLedgerApi.V1.Address (toScriptHash)
+import PlutusLedgerApi.V1.Time (POSIXTime(..))
+import PlutusLedgerApi.V1.Interval (Extended(..), LowerBound(..), UpperBound(..), ivFrom, ivTo, contains, to, from)
 import PlutusTx
 import PlutusTx.Blueprint
 import PlutusTx.Prelude qualified as PlutusTx
 
+-- Now we only need PubKeyHash as param since we'll use tx time
+type ScriptIdentityParams = PubKeyHash
+type ScriptIdentityRedeemer = ()
 
--- Parameters for the minting policy
-data ScriptIdentityParams = ScriptIdentityParams
-    { sipHousePkh :: PubKeyHash  -- House's public key hash
-    }
-    deriving stock (Generic)
-    deriving anyclass (HasBlueprintDefinition)
-
-PlutusTx.makeLift ''ScriptIdentityParams
-PlutusTx.makeIsDataSchemaIndexed ''ScriptIdentityParams [('ScriptIdentityParams, 0)]
-
--- Token names for each script
+-- Token names stay the same
 {-# INLINEABLE coinFlipTokenName #-}
 coinFlipTokenName :: TokenName
 coinFlipTokenName = TokenName "CoinFlip"
@@ -67,59 +62,43 @@ housePotTokenName = TokenName "HousePot"
 {-# INLINEABLE scriptIdentityTypedPolicy #-}
 scriptIdentityTypedPolicy ::
     ScriptIdentityParams ->
-    () ->  -- Redeemer not used
+    ScriptIdentityRedeemer ->
     ScriptContext ->
     Bool
-scriptIdentityTypedPolicy params _ ctx =
+scriptIdentityTypedPolicy pkh _redeemer ctx =
     PlutusTx.and
-        [ -- Only house can mint
-          txSignedBy txInfo (sipHousePkh params)
-        , -- Exactly three tokens must be minted
-          validateMintedTokens
-        , -- Each token must go to a script address
-          validateTokenDestinations
+        [ txSignedBy txInfo pkh  -- Only authorized key can mint
+        , mintedExactlyThreeTokens  -- Must mint exactly our three tokens
+        , validateMintingWindow     -- Must mint within 10 seconds of tx start
         ]
   where
     txInfo = scriptContextTxInfo ctx
-
-    -- Validate that exactly one of each token is minted
-    validateMintedTokens :: Bool
-    validateMintedTokens =
-        case flattenValue (txInfoMint txInfo) of
-            [(cs, tn1, q1), (cs', tn2, q2), (cs'', tn3, q3)] ->
-                PlutusTx.and
-                    [ cs PlutusTx.== ownCurrencySymbol ctx
-                    , cs' PlutusTx.== ownCurrencySymbol ctx
-                    , cs'' PlutusTx.== ownCurrencySymbol ctx
-                    , q1 PlutusTx.== 1
-                    , q2 PlutusTx.== 1
-                    , q3 PlutusTx.== 1
-                    , PlutusTx.and
-                        [ tn1 PlutusTx.== coinFlipTokenName PlutusTx.|| 
-                          tn1 PlutusTx.== vrfHolderTokenName PlutusTx.|| 
-                          tn1 PlutusTx.== housePotTokenName
-                        , tn2 PlutusTx.== coinFlipTokenName PlutusTx.|| 
-                          tn2 PlutusTx.== vrfHolderTokenName PlutusTx.|| 
-                          tn2 PlutusTx.== housePotTokenName
-                        , tn3 PlutusTx.== coinFlipTokenName PlutusTx.|| 
-                          tn3 PlutusTx.== vrfHolderTokenName PlutusTx.|| 
-                          tn3 PlutusTx.== housePotTokenName
-                        , tn1 PlutusTx./= tn2
-                        , tn2 PlutusTx./= tn3
-                        , tn1 PlutusTx./= tn3
-                        ]
-                    ]
+    
+    -- Get the transaction's validity start time and ensure minting happens within 10 seconds
+    validateMintingWindow = 
+        case ivFrom (txInfoValidRange txInfo) of
+            LowerBound (Finite startTime) _ -> 
+                -- Ensure tx validity window is at most 10 seconds
+                case ivTo (txInfoValidRange txInfo) of
+                    UpperBound (Finite endTime) _ ->
+                        endTime PlutusTx.<= (startTime PlutusTx.+ 10000)  -- 10 seconds in milliseconds
+                    _ -> False
             _ -> False
-
-    -- Validate that tokens go to script addresses
-    validateTokenDestinations :: Bool
-    validateTokenDestinations =
-        let outputs = txInfoOutputs txInfo
-        in PlutusTx.and $ PlutusTx.map
-            (\out -> case toScriptHash (txOutAddress out) of
-                Just _ -> True
-                Nothing -> False)
-            outputs
+    
+    mintedExactlyThreeTokens = case flattenValue (txInfoMint txInfo) of
+        [(cs1, tn1, q1), (cs2, tn2, q2), (cs3, tn3, q3)] ->
+            PlutusTx.and
+                [ cs1 PlutusTx.== ownCurrencySymbol ctx
+                , cs2 PlutusTx.== ownCurrencySymbol ctx
+                , cs3 PlutusTx.== ownCurrencySymbol ctx
+                , q1 PlutusTx.== 1
+                , q2 PlutusTx.== 1
+                , q3 PlutusTx.== 1
+                , tn1 PlutusTx.== coinFlipTokenName
+                , tn2 PlutusTx.== vrfHolderTokenName
+                , tn3 PlutusTx.== housePotTokenName
+                ]
+        _ -> False
 
 {-# INLINEABLE scriptIdentityUntypedPolicy #-}
 scriptIdentityUntypedPolicy ::
@@ -127,10 +106,10 @@ scriptIdentityUntypedPolicy ::
     BuiltinData ->
     BuiltinData ->
     PlutusTx.BuiltinUnit
-scriptIdentityUntypedPolicy params redeemer ctx =
+scriptIdentityUntypedPolicy pkh redeemer ctx =
     PlutusTx.check
         ( scriptIdentityTypedPolicy
-            params
+            pkh
             (PlutusTx.unsafeFromBuiltinData redeemer)
             (PlutusTx.unsafeFromBuiltinData ctx)
         )
@@ -138,7 +117,7 @@ scriptIdentityUntypedPolicy params redeemer ctx =
 scriptIdentityPolicyScript ::
     ScriptIdentityParams ->
     CompiledCode (BuiltinData -> BuiltinData -> PlutusTx.BuiltinUnit)
-scriptIdentityPolicyScript params =
+scriptIdentityPolicyScript pkh =
     $$(PlutusTx.compile [||scriptIdentityUntypedPolicy||])
-        `PlutusTx.unsafeApplyCode` PlutusTx.liftCode plcVersion100 params
+        `PlutusTx.unsafeApplyCode` PlutusTx.liftCode plcVersion100 pkh
 

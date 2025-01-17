@@ -15,6 +15,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.0.0 #-}
 
 module Main where
 
@@ -22,13 +23,12 @@ import NFTThree
 import Data.ByteString.Short qualified as Short
 import Data.Set qualified as Set
 import PlutusLedgerApi.Common (serialiseCompiledCode)
+import PlutusLedgerApi.V2 (PubKeyHash(..))
 import PlutusTx.Blueprint
 import System.Environment (getArgs)
 
-scriptIdentityParams :: ScriptIdentityParams
-scriptIdentityParams = ScriptIdentityParams
-    { sipHousePkh = "addr1qxp72h6d3eqsw54908l8jkpa0m7pcye9qsvvts4a578vxhv40gwsejuhku9zhazmm4wzx74ze02tme2kq7rj3uyvkxqqvyskch"
-    }
+scriptIdentityParams :: PubKeyHash
+scriptIdentityParams = PubKeyHash "addr_test1qzp72h6d3eqsw54908l8jkpa0m7pcye9qsvvts4a578vxhv40gwsejuhku9zhazmm4wzx74ze02tme2kq7rj3uyvkxqq0jdk5g"
 
 myContractBlueprint :: ContractBlueprint
 myContractBlueprint =
@@ -36,7 +36,7 @@ myContractBlueprint =
     { contractId = Just "script-identity-policy"
     , contractPreamble = myPreamble
     , contractValidators = Set.singleton myValidator
-    , contractDefinitions = deriveDefinitions @[ScriptIdentityParams, ()]
+    , contractDefinitions = deriveDefinitions @[PubKeyHash, ()]
     }
 
 myPreamble :: Preamble
@@ -59,7 +59,7 @@ myValidator =
             { parameterTitle = Just "Parameters"
             , parameterDescription = Just "House public key hash for authorization"
             , parameterPurpose = Set.singleton Mint
-            , parameterSchema = definitionRef @ScriptIdentityParams
+            , parameterSchema = definitionRef @PubKeyHash
             }
         ]
     , validatorRedeemer =
