@@ -41,7 +41,6 @@ import PlutusLedgerApi.V1.Interval (Extended(..), LowerBound(..), UpperBound(..)
 import PlutusTx
 import PlutusTx.Blueprint
 import PlutusTx.Prelude qualified as PlutusTx
-import PlutusTx.Show qualified as PlutusTx
 
 -- Now we only need PubKeyHash as param since we'll use tx time
 type ScriptIdentityParams = PubKeyHash
@@ -67,50 +66,48 @@ scriptIdentityTypedPolicy ::
     ScriptContext ->
     Bool
 scriptIdentityTypedPolicy pkh _redeemer ctx =
-    PlutusTx.and
-        [ PlutusTx.traceIfFalse "Unauthorized: Transaction not signed by correct key" 
-            (txSignedBy txInfo pkh)
-        , PlutusTx.traceIfFalse "Invalid: Must mint exactly three tokens"
-            mintedExactlyThreeTokens
-        , PlutusTx.traceIfFalse "Invalid: Transaction outside minting window"
-            validateMintingWindow
-        ]
-  where
-    txInfo = scriptContextTxInfo ctx
-    
+    let info = scriptContextTxInfo ctx
+        signedByAuth = txSignedBy info pkh
+        mintingWindowValid = validateMintingWindow info
+        threeTokensValid = mintedExactlyThreeTokens info
+    in PlutusTx.traceIfFalse "Not signed by authorized key" signedByAuth
+       PlutusTx.&& PlutusTx.traceIfFalse "Invalid minting window" mintingWindowValid
+       PlutusTx.&& threeTokensValid
+  where    
     -- Get the transaction's validity start time and ensure minting happens within 10 seconds
-    validateMintingWindow = 
-        case ivFrom (txInfoValidRange txInfo) of
+    validateMintingWindow :: TxInfo -> Bool 
+    validateMintingWindow info = 
+        case ivFrom (txInfoValidRange info) of
             LowerBound (Finite startTime) _ -> 
-                -- Ensure tx validity window is at most 10 seconds
-                case ivTo (txInfoValidRange txInfo) of
+                case ivTo (txInfoValidRange info) of
                     UpperBound (Finite endTime) _ ->
-                        let validWindow = endTime PlutusTx.<= (startTime PlutusTx.+ 10000)
-                            startTimeInt = getPOSIXTime startTime
-                            endTimeInt = getPOSIXTime endTime
-                        in PlutusTx.traceIfFalse 
-                            ("Invalid time window - Start: " PlutusTx.<> PlutusTx.show startTimeInt 
-                             PlutusTx.<> " End: " PlutusTx.<> PlutusTx.show endTimeInt)
-                            validWindow
-                    _ -> PlutusTx.traceError "Invalid: Missing upper bound for validity interval"
-            _ -> PlutusTx.traceError "Invalid: Missing lower bound for validity interval"
+                        let timeValid = endTime PlutusTx.<= (startTime PlutusTx.+ 10000)
+                        in PlutusTx.traceIfFalse "Time window exceeds 10 seconds" timeValid
+                    _ -> PlutusTx.traceError "Invalid upper bound in time range"
+            _ -> PlutusTx.traceError "Invalid lower bound in time range"
     
-    mintedExactlyThreeTokens = case flattenValue (txInfoMint txInfo) of
+    mintedExactlyThreeTokens :: TxInfo -> Bool
+    mintedExactlyThreeTokens info = case flattenValue (txInfoMint info) of
         [(cs1, tn1, q1), (cs2, tn2, q2), (cs3, tn3, q3)] ->
-            let conditions = 
-                    [ (cs1 PlutusTx.== ownCurrencySymbol ctx, "Invalid currency symbol for token 1")
-                    , (cs2 PlutusTx.== ownCurrencySymbol ctx, "Invalid currency symbol for token 2")
-                    , (cs3 PlutusTx.== ownCurrencySymbol ctx, "Invalid currency symbol for token 3")
-                    , (q1 PlutusTx.== 1, "Invalid quantity for token 1")
-                    , (q2 PlutusTx.== 1, "Invalid quantity for token 2")
-                    , (q3 PlutusTx.== 1, "Invalid quantity for token 3")
-                    , (tn1 PlutusTx.== coinFlipTokenName, "Invalid token name: expected CoinFlip")
-                    , (tn2 PlutusTx.== vrfHolderTokenName, "Invalid token name: expected VRFHolder")
-                    , (tn3 PlutusTx.== housePotTokenName, "Invalid token name: expected HousePot")
+            let symbolsValid = PlutusTx.and
+                    [ cs1 PlutusTx.== ownCurrencySymbol ctx
+                    , cs2 PlutusTx.== ownCurrencySymbol ctx
+                    , cs3 PlutusTx.== ownCurrencySymbol ctx
                     ]
-            in PlutusTx.all (\(condition, msg) -> PlutusTx.traceIfFalse msg condition) conditions
-        xs -> PlutusTx.traceError 
-              ("Invalid number of minted tokens: " PlutusTx.<> PlutusTx.show (PlutusTx.length xs))
+                quantitiesValid = PlutusTx.and
+                    [ q1 PlutusTx.== 1
+                    , q2 PlutusTx.== 1
+                    , q3 PlutusTx.== 1
+                    ]
+                namesValid = PlutusTx.and
+                    [ tn1 PlutusTx.== coinFlipTokenName
+                    , tn2 PlutusTx.== vrfHolderTokenName
+                    , tn3 PlutusTx.== housePotTokenName
+                    ]
+            in PlutusTx.traceIfFalse "Invalid currency symbols" symbolsValid
+               PlutusTx.&& PlutusTx.traceIfFalse "Invalid token quantities" quantitiesValid
+               PlutusTx.&& PlutusTx.traceIfFalse "Invalid token names" namesValid
+        _ -> PlutusTx.traceError "Expected exactly three tokens to be minted"
 
 {-# INLINEABLE scriptIdentityUntypedPolicy #-}
 scriptIdentityUntypedPolicy ::

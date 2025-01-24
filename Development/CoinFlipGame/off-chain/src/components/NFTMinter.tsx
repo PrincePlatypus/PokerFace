@@ -1,12 +1,13 @@
 import { CardanoWallet, useWallet } from '@meshsdk/react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   Transaction, 
   PlutusScript,
-  AssetMetadata,
-  Mint,
-  DEFAULT_REDEEMER_BUDGET
+  serializePlutusScript,
+  stringToHex,
+  resolveScriptHash
 } from '@meshsdk/core';
+import cbor from 'cbor';
 
 // Import the blueprint directly from on-chain directory
 import scriptBlueprint from '../../../on-chain/compiled/nft-three-policy.plutus';
@@ -17,29 +18,13 @@ export default function NFTMinter() {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Log the entire blueprint to verify its contents
-    console.log('Script Blueprint:', {
-      id: scriptBlueprint.$id,
-      title: scriptBlueprint.validators[0].title,
-      hash: scriptBlueprint.validators[0].hash,
-      fullCode: scriptBlueprint.validators[0].compiledCode
-    });
-  }, []);
-
   const handleMint = async () => {
-    if (!connected) {
-      setError("Please connect your wallet first");
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
       setTxHash(null);
 
-      const usedAddress = await wallet.getUsedAddresses();
-      const address = usedAddress[0];
+      const walletAddress = (await wallet.getUsedAddresses())[0];
       const collateral = await wallet.getCollateral();
 
       if (!collateral[0]) {
@@ -47,58 +32,52 @@ export default function NFTMinter() {
         return;
       }
 
-      // Define the three NFTs to mint with minimal metadata
-      const coinFlipAsset: Mint = {
-        assetName: "CoinFlip",
-        assetQuantity: "1",
-        metadata: { name: "CoinFlip" },
-        label: "721",
-        recipient: address
+      // Import and parse the script blueprint
+      const plutusScript = {
+        code: cbor
+          .encode(
+            Buffer.from(scriptBlueprint.validators[0].compiledCode, 'hex')
+          )
+          .toString('hex'),
+        version: 'V2' as const
       };
 
-      const vrfHolderAsset: Mint = {
-        assetName: "VRFHolder",
-        assetQuantity: "1",
-        metadata: { name: "VRFHolder" },
-        label: "721",
-        recipient: address
+      const scriptAddress = serializePlutusScript(plutusScript).address;
+      const scriptHash = resolveScriptHash(plutusScript.code, plutusScript.version);
+
+      // Define tokens with script hash
+      const coinFlipToken = {
+        assetName: 'CoinFlip',
+        assetQuantity: '1',
+        recipient: {
+          address: scriptAddress,
+          datum: { inline: true, value: [] }
+        }
       };
 
-      const housePotAsset: Mint = {
-        assetName: "HousePot",
-        assetQuantity: "1",
-        metadata: { name: "HousePot" },
-        label: "721",
-        recipient: address
+      const vrfHolderToken = {
+        assetName: 'VRFHolder',
+        assetQuantity: '1',
+        recipient: {
+          address: scriptAddress,
+          datum: { inline: true, value: [] }
+        }
       };
 
-      // Define the plutus script from the blueprint WITHOUT parameters
-      const script: PlutusScript = {
-        code: scriptBlueprint.validators[0].compiledCode,
-        version: "V2"
-        // Remove params since they're already compiled into the script
+      const housePotToken = {
+        assetName: 'HousePot',
+        assetQuantity: '1',
+        recipient: {
+          address: scriptAddress,
+          datum: { inline: true, value: [] }
+        }
       };
 
-      // Create unit/void redeemer with budget
-      const redeemer = {
-        data: [],  // Empty array for unit/void value
-        tag: "MINT",
-        budget: DEFAULT_REDEEMER_BUDGET
-      };
-
-      // Create transaction with 10-second validity window
-      const now = Date.now(); // Current time in milliseconds
-      const tenSecondsFromNow = now + 10000; // Add 10 seconds
-
-      const tx = new Transaction({ 
-        initiator: wallet,
-        validFrom: now,
-        validTo: tenSecondsFromNow,
-      })
-        .mintAsset(script, coinFlipAsset, redeemer)
-        .mintAsset(script, vrfHolderAsset, redeemer)
-        .mintAsset(script, housePotAsset, redeemer)
-        .setRequiredSigners([address])
+      const tx = new Transaction({ initiator: wallet })
+        .mintAsset(plutusScript, coinFlipToken, { data: [] })
+        .mintAsset(plutusScript, vrfHolderToken, { data: [] })
+        .mintAsset(plutusScript, housePotToken, { data: [] })
+        .setRequiredSigners([walletAddress])
         .setCollateral([collateral[0]]);
 
       const unsignedTx = await tx.build();
@@ -121,10 +100,7 @@ export default function NFTMinter() {
       <h1 className="text-3xl font-bold mb-4">CoinFlip Game NFT Minter</h1>
       
       <div className="flex flex-col sm:flex-row items-center gap-4">
-        {/* Wallet Connection */}
         <CardanoWallet />
-
-        {/* Minting Button - Always visible */}
         <button
           className={`
             px-6 py-3 rounded-lg font-semibold text-white
@@ -150,14 +126,12 @@ export default function NFTMinter() {
         </button>
       </div>
 
-      {/* Error Display */}
       {error && (
         <div className="text-red-500 text-sm mt-2">
           {error}
         </div>
       )}
 
-      {/* Success Display */}
       {txHash && (
         <div className="text-green-500 text-sm mt-2">
           Transaction successful! Hash: {txHash}

@@ -27,8 +27,6 @@ import PlutusLedgerApi.V2 (PubKeyHash(..))
 import PlutusTx.Blueprint
 import System.Environment (getArgs)
 
-scriptIdentityParams :: PubKeyHash
-scriptIdentityParams = PubKeyHash "addr_test1qzp72h6d3eqsw54908l8jkpa0m7pcye9qsvvts4a578vxhv40gwsejuhku9zhazmm4wzx74ze02tme2kq7rj3uyvkxqq0jdk5g"
 
 myContractBlueprint :: ContractBlueprint
 myContractBlueprint =
@@ -71,7 +69,7 @@ myValidator =
           }
     , validatorDatum = Nothing
     , validatorCompiled = do
-        let script = scriptIdentityPolicyScript scriptIdentityParams
+        let script = scriptIdentityPolicyScript (PubKeyHash "addr_test1qzp72h6d3eqsw54908l8jkpa0m7pcye9qsvvts4a578vxhv40gwsejuhku9zhazmm4wzx74ze02tme2kq7rj3uyvkxqq0jdk5g")
         let code = Short.fromShort (serialiseCompiledCode script)
         Just (compiledValidator PlutusV2 code)
     }
