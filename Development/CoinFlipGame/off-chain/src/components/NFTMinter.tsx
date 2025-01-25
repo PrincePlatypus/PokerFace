@@ -28,18 +28,16 @@ export default function NFTMinter() {
       const collateral = await wallet.getCollateral();
 
       if (!collateral[0]) {
-        setError("No collateral found. Please add some ADA as collateral in your wallet.");
+        setError("No collateral found");
         return;
       }
 
-      // Import and parse the script blueprint
-      const plutusScript = {
+      // Properly encode the script with CBOR
+      const plutusScript: PlutusScript = {
         code: cbor
-          .encode(
-            Buffer.from(scriptBlueprint.validators[0].compiledCode, 'hex')
-          )
+          .encode(Buffer.from(scriptBlueprint.validators[0].compiledCode, 'hex'))
           .toString('hex'),
-        version: 'V2' as const
+        version: 'V2'
       };
 
       const scriptAddress = serializePlutusScript(plutusScript).address;
@@ -49,46 +47,47 @@ export default function NFTMinter() {
       const coinFlipToken = {
         assetName: 'CoinFlip',
         assetQuantity: '1',
-        recipient: {
-          address: scriptAddress,
-          datum: { inline: true, value: [] }
-        }
       };
 
       const vrfHolderToken = {
         assetName: 'VRFHolder',
         assetQuantity: '1',
-        recipient: {
-          address: scriptAddress,
-          datum: { inline: true, value: [] }
-        }
+
       };
 
       const housePotToken = {
         assetName: 'HousePot',
         assetQuantity: '1',
-        recipient: {
-          address: scriptAddress,
-          datum: { inline: true, value: [] }
-        }
       };
 
+      const redeemer = { data: [] };  // Empty data since contract ignores redeemer
+
       const tx = new Transaction({ initiator: wallet })
-        .mintAsset(plutusScript, coinFlipToken, { data: [] })
-        .mintAsset(plutusScript, vrfHolderToken, { data: [] })
-        .mintAsset(plutusScript, housePotToken, { data: [] })
+        .mintAsset(plutusScript, coinFlipToken, redeemer)
+        .mintAsset(plutusScript, vrfHolderToken, redeemer)
+        .mintAsset(plutusScript, housePotToken, redeemer)
         .setRequiredSigners([walletAddress])
         .setCollateral([collateral[0]]);
 
+      // Add debugging before building
+      console.log("Transaction before build:", tx);
+      
       const unsignedTx = await tx.build();
-      const signedTx = await wallet.signTx(unsignedTx, true);
-      const txHash = await wallet.submitTx(signedTx);
-
-      setTxHash(txHash);
-      console.log('Transaction submitted:', txHash);
+      console.log("Unsigned transaction:", unsignedTx);
+      
+      const signedTx = await wallet.signTx(unsignedTx);
+      console.log("Signed transaction:", signedTx);
+      
+      try {
+        const txHash = await wallet.submitTx(signedTx);
+        setTxHash(txHash);
+      } catch (submitError: any) {
+        console.error("Full submission error:", submitError);
+        throw submitError;
+      }
 
     } catch (error) {
-      console.error("Minting error:", error);
+      console.error("Full error object:", error);
       setError(error instanceof Error ? error.message : "Unknown error occurred");
     } finally {
       setLoading(false);

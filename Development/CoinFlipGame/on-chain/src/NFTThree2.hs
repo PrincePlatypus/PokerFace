@@ -68,11 +68,23 @@ scriptIdentityTypedPolicy ::
 scriptIdentityTypedPolicy pkh _redeemer ctx =
     let info = scriptContextTxInfo ctx
         signedByAuth = txSignedBy info pkh
+        mintingWindowValid = validateMintingWindow info
         threeTokensValid = mintedExactlyThreeTokens info
     in PlutusTx.traceIfFalse "Not signed by authorized key" signedByAuth
+       PlutusTx.&& PlutusTx.traceIfFalse "Invalid minting window" mintingWindowValid
        PlutusTx.&& threeTokensValid
   where    
     -- Get the transaction's validity start time and ensure minting happens within 10 seconds
+    validateMintingWindow :: TxInfo -> Bool 
+    validateMintingWindow info = 
+        case ivFrom (txInfoValidRange info) of
+            LowerBound (Finite startTime) _ -> 
+                case ivTo (txInfoValidRange info) of
+                    UpperBound (Finite endTime) _ ->
+                        let timeValid = endTime PlutusTx.<= (startTime PlutusTx.+ 10000)
+                        in PlutusTx.traceIfFalse "Time window exceeds 10 seconds" timeValid
+                    _ -> PlutusTx.traceError "Invalid upper bound in time range"
+            _ -> PlutusTx.traceError "Invalid lower bound in time range"
     
     mintedExactlyThreeTokens :: TxInfo -> Bool
     mintedExactlyThreeTokens info = case flattenValue (txInfoMint info) of
